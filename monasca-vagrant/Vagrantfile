@@ -1,0 +1,71 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2" # Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.cache.scope = :box
+
+  config.vm.synced_folder "~/", "/vagrant_home"
+
+  # One vm just for devstack (to access the UI)
+  config.vm.define "devstack" do |ds|
+    ds.vm.hostname = "devstack"
+    ds.vm.box = "ubuntu/trusty64"
+#    ds.vm.box_version = "0.2.0"
+    ds.vm.network :private_network, ip: "192.168.10.5"
+    ds.vm.provider "virtualbox" do |vb|
+      vb.memory = 6144
+      vb.cpus = 2
+      vb.gui = true
+    end
+    ds.vm.provision "shell", inline: <<-SHELL, privileged: false
+     sudo cp /vagrant/hosts /etc/hosts
+     sudo apt-get update
+     sudo apt-get install git bridge-utils python-pip -y
+     sudo pip install python-novaclient
+     cd /opt
+     sudo mkdir stack
+     cd stack
+     sudo chown -R vagrant:vagrant /opt
+     git clone https://github.com/openstack-dev/devstack.git
+     cp /vagrant/data/localrc devstack/localrc
+     cd devstack
+     git checkout -b stable/mitaka remotes/origin/stable/mitaka
+#     ./stack.sh
+    SHELL
+  end
+
+  # One vm running all the services
+  config.vm.define "mini-mon" do |mm|
+    mm.vm.hostname = 'mini-mon'
+    mm.vm.box = "ubuntu/trusty64"
+    mm.vm.network :private_network, ip: "192.168.10.4"
+    mm.vm.provider "virtualbox" do |vb|
+      vb.memory = 8192
+      vb.cpus = 4
+      vb.gui = true
+    end
+    mm.vm.provision "shell", inline: <<-SHELL, privileged: false
+      sudo apt-get update
+      wget -qO- https://get.docker.com/ | sh
+      sudo docker pull monasca/demo
+#      sudo docker run -d -p 80:80 -p 8080:8080 -p 5000:5000 --name monasca monasca/demo
+
+     sudo cp /vagrant/hosts /etc/hosts
+     sudo apt-get install -y build-essential autoconf libtool pkg-config python-opengl python-imaging python-pyrex python-pyside.qtopengl idle-python2.7 qt4-dev-tools qt4-designer libqtgui4 libqtcore4 libqt4-xml libqt4-test libqt4-script libqt4-network libqt4-dbus python-qt4 python-qt4-gl libgle3 python-dev
+     sudo apt-get install -y python-twisted-web python2.7-dev 
+     sudo apt-get install -y git python-pip  libffi-dev libssl-dev
+     sudo apt-get install -y default-jre default-jdk  openjdk-7-jdk
+
+     ##########
+     sudo pip install pip psutil oslo.config cffi markupsafe python-novaclient
+     sudo pip install ansible==1.9.6 docker-py 
+     git clone https://github.com/hpcloud-mon/monasca-docker.git
+     cd monasca-docker/
+     ansible-playbook -i hosts -c local mini-mon.yml 
+     #ansible-playbook -i hosts -c local mini-mon.yml --extra-vars "action=absent" 
+    SHELL
+  end
+end

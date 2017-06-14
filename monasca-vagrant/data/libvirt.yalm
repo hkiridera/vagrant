@@ -1,0 +1,14 @@
+init_config:
+    admin_password: pass
+    admin_user: nova
+    admin_tenant_name: services
+    identity_uri: 'https://192.168.10.5:5000/v2.0'
+    region_name: 'RegionOne'
+    cache_dir: /dev/shm
+    nova_refresh: 1200
+    metadata:
+    - scale_group
+    vm_probation: 300
+    alive_only: false
+instances:
+- {}

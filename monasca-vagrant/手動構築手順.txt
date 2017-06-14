@@ -1,0 +1,259 @@
+http://monasca.io/categoris/
+
+
+###########
+# devstack
+###########
+sudo apt-get install build-essential autoconf libtool pkg-config python-opengl python-imaging python-pyrex python-pyside.qtopengl idle-python2.7 qt4-dev-tools qt4-designer libqtgui4 libqtcore4 libqt4-xml libqt4-test libqt4-script libqt4-network libqt4-dbus python-qt4 python-qt4-gl libgle3 python-dev
+
+source /home/vagrant/devstack/openrc admin admin
+keystone role-create --name monasca-user
+
+
+
+
+###########
+# mini-mon
+###########
+
+sudo apt-get install -y git python-pip python-dev
+sudo apt-get install build-essential autoconf libtool pkg-config python-opengl python-imaging python-pyrex python-pyside.qtopengl idle-python2.7 qt4-dev-tools qt4-designer libqtgui4 libqtcore4 libqt4-xml libqt4-test libqt4-script libqt4-network libqt4-dbus python-qt4 python-qt4-gl libgle3 python-dev
+
+
+sudo pip install markupsafe
+sudo pip install ansible==1.9.6
+
+
+git clone https://github.com/openstack/monasca-vagrant.git
+cd monasca-vagrant/
+ansible-galaxy install -r requirements.yml -p ./roles
+
+vi /etc/hosts
+192.168.10.5 devstack
+192.168.10.4 mini-mon
+
+
+
+vi mini-mon.yml
+vi smoke.yml
+vi event.yml
+vars_files:
+- host_vars/mini-mon
+
+
+
+
+
+
+git clone https://github.com/openstack/monasca-common.git
+git clone https://github.com/openstack/monasca-api.git
+
+
+
+
+
+mini-mon.yml smoke.yml event.yml
+vars_files:
+- host_vars/mini-mon
+
+
+$ vi hosts
+[mini-mon]
+192.168.10.4
+[devstack]
+192.168.10.5
+
+
+ssh-keygen
+ssh-copy-id -i ~/.ssh/id_rsa.pub vagrant@192.168.10.4
+ssh-copy-id -i ~/.ssh/id_rsa.pub vagrant@192.168.10.5
+
+
+
+ansible-playbook -i hosts devstack.yml
+
+
+keystoneとhorizonのrequirements.txtを更新
+
+
+
+
+
+
+
+
+/home/vagrant/monasca-vagrant/roles/monasca-devstack/tasks/main.yml
+tagを消す
+
+
+/etc/monasca/agent/conf.d/rabbitmq.yaml
+https://github.com/openstack/monasca-agent/blob/master/conf.d/rabbitmq.yaml.example
+
+
+
+
+------------------------------------------------------
+手動
+mini-mon
+
+事前準備
+$ sudo apt-get update
+$ sudo apt-get install -y git
+
+
+ホスト名設定
+# vi /etc/hosts
+127.0.0.1 monasca
+[please_put_correct_ip] devstack
+
+mysqlのインストール
+# hostname monasca
+# apt-get install -y git
+# apt-get install -y mysql-server libmysqlclient-dev
+mysql_pass: password
+
+# wget https://raw.githubusercontent.com/stackforge/cookbook-monasca-schema/master/files/default/mysql/mon.sql
+# mysql -uroot -ppassword < mon.sql
+# rm -rf mon.sql
+
+https://github.com/hpcloud-mon/ansible-monasca-schema/blob/master/templates/mon.sql.j2
+
+# sudo sed -i.bak 's/127.0.0.1/0.0.0.0/g' /etc/mysql/my.cnf
+
+# service mysql restart
+
+
+zookeeperをインストール
+# apt-get install -y zookeeper zookeeperd zookeeper-bin
+# service zookeeper start
+
+
+scaleのインストール
+# apt-get install -y scala
+# wget http://mirror.switch.ch/mirror/apache/dist/kafka/0.8.1.1/kafka_2.9.2-0.8.1.1.tgz
+# tar xvf kafka_2.9.2-0.8.1.1.tgz
+# mv kafka_2.9.2-0.8.1.1 kafka
+# rm kafka_2.9.2-0.8.1.1.tgz
+
+sed -i.bak 's/#host.name=localhost/host.name=monasca/g' kafka/config/server.properties
+sed -i.bak 's/zookeeper.connect=localhost:2181/zookeeper.connect=monasca:2181/g' kafka/config/server.properties
+nohup ./kafka/bin/kafka-server-start.sh ./kafka/config/server.properties &
+
+
+
+# ./kafka/bin/kafka-topics.sh --create --topic metrics --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic events --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic raw-events --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic transformed-events --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic alarm-state-transitions --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic alarm-notifications --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+# ./kafka/bin/kafka-topics.sh --create --topic retry-notifications --partitions 4 --zookeeper monasca:2181 --replication-factor 1
+
+
+# debconf-set-selections <<< "postfix postfix/mailname string monasca"
+# debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+# apt-get install -y postfix
+
+
+# wget http://s3.amazonaws.com/influxdb/influxdb_0.4.3_amd64.deb
+# dpkg -i influxdb_0.4.3_amd64.deb
+# rm influxdb_latest_amd64.deb
+
+
+# sed -i.bak 's/port = 8090/port = 9090/g' /opt/influxdb/shared/config.toml
+# service influxdb restart
+
+
+curl -X POST 'http://monasca:8086/db?u=root&p=root' -d '{"name": "mon"}'
+curl -X POST 'http://monasca:8086/db/mon/users?u=root&p=root' -d '{"name": "mon_api", "password": "password"}'
+curl -X POST 'http://monasca:8086/db/mon/users?u=root&p=root' -d '{"name": "mon_persister", "password": "password"}'
+
+
+
+In order to install Monasca’s packages we need to setup the python environment and java environment
+# apt-get install -y python-pip default-jre default-jdk maven
+
+
+wget http://mirror.switch.ch/mirror/apache/dist/storm/apache-storm-0.9.3/apache-storm-0.9.3.tar.gz
+tar xvf apache-storm-0.9.3.tar.gz
+rm apache-storm-0.9.3.tar.gz
+sudo mkdir -p /opt/storm/
+sudo mv apache-storm-0.9.3/ /opt/storm/
+sudo mv /opt/storm/apache-storm-0.9.3/ /opt/storm/current
+
+sed -i.bak '/"nimbus"/a\
+nimbus.host: "monasca"\
+storm.zookeeper.servers:\
+  - monasca\
+\
+ui.port: 60888' /opt/storm/current/conf/storm.yaml
+
+
+/opt/storm/current/bin/storm nimbus &
+/opt/storm/current/bin/storm supervisor &
+
+
+
+git clone https://github.com/icclab/monasca-sample-config.git
+mkdir -p /var/log/monasca
+chmod o+w /var/log/monasca/
+
+
+git clone https://github.com/stackforge/monasca-common.git
+cd monasca-common
+mvn clean install
+cd ..
+
+git clone https://github.com/stackforge/monasca-api.git
+cd monasca-api
+mvn package
+cd ..
+dpkg -i monasca-api/java/debs/binaries/*.deb
+mkdir /etc/monasca/api/
+cp monasca-sample-config/monasca-api/api-config.yml /etc/monasca/api/
+
+python setup.py install
+cp etc/api-config.* /etc/monasca/
+
+http://stackoverflow.com/questions/22571848/debugging-the-error-gcc-error-x86-64-linux-gnu-gcc-no-such-file-or-director
+apt-get install build-essential autoconf libtool pkg-config python-opengl python-imaging python-pyrex python-pyside.qtopengl idle-python2.7 qt4-dev-tools qt4-designer libqtgui4 libqtcore4 libqt4-xml libqt4-test libqt4-script libqt4-network libqt4-dbus python-qt4 python-qt4-gl libgle3 python-dev
+
+http://docs.gunicorn.org/en/stable/install.html
+apt-get install gunicorn
+pip install gunicorn
+pip install git+https://github.com/benoitc/gunicorn.git
+pip install -U git+https://github.com/benoitc/gunicorn.git
+pip install greenlet  
+pip install eventlet
+pip install gevent    
+
+pip install falcon
+apt-get install python-oslo-log
+apt-get install python-keystonemiddleware
+apt-get install python-oslo-middleware
+pip install simplejson
+pip install voluptuous
+pip install kafka
+pip install influxdb
+pip install pyparsing
+pip install pymysql
+pip install validate_email
+
+
+gunicorn -k eventlet --worker-connections=2000 --backlog=1000 --paste /etc/monasca/api-config.ini
+
+
+service monasca-api restart
+
+
+---------------------------------------------------------
+手動
+devstack側
+
+
+
+$ sudo apt-get update
+
+
+
+ansible-playbook -i hosts mini-mon.yml -e database_type=influxdb -e influxdb_url=http://192.168.10.4:8086
