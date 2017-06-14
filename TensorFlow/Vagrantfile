@@ -1,0 +1,52 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.cache.scope = :box
+ 
+  config.vm.define :TensorFlow do |node|
+    node.cache.scope = :box
+    node.vm.box = "ubuntu/trusty64"
+    node.vm.hostname = "TensorFlow"
+    #node.vm.network :forwarded_port, guest: 22, host: 2001, id: "ssh"
+    node.vm.network :private_network, ip: "192.168.33.40"
+    node.vm.provider "virtualbox" do |vb|
+     # Customize the amount of memory on the VM:
+     vb.memory = "2048"
+     vb.gui = false
+     vb.cpus = "1"
+    end    
+    node.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y wget curl git vim libxml2-dev libxslt1-dev 
+      sudo apt-get install -y python-pip python-dev python-virtualenv
+      sudo apt-get install -y build-essential autoconf libtool pkg-config python-opengl python-imaging python-pyrex python-pyside.qtopengl idle-python2.7 qt4-dev-tools qt4-designer libqtgui4 libqtcore4 libqt4-xml libqt4-test libqt4-script libqt4-network libqt4-dbus python-qt4 python-qt4-gl libgle3 python-dev python-pip libcairomm-1.0-1 libjson-glib-1.0-0
+      sudo apt-get install -y libopencv-dev build-essential cmake git libgtk2.0-dev pkg-config python-dev python-numpy libdc1394-22 libdc1394-22-dev libjpeg-dev libpng12-dev libtiff4-dev libjasper-dev libavcodec-dev libavformat-dev libswscale-dev libxine-dev libgstreamer0.10-dev libgstreamer-plugins-base0.10-dev libv4l-dev libtbb-dev libqt4-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip
+
+      mkdir tensorflow
+      virtualenv --system-site-packages ~/tensorflow
+      cd ~/tensorflow
+      source bin/activate
+      pip install --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.9.0rc0-cp27-none-linux_x86_64.whl
+      pip install matplotlib
+      
+      cd ~/
+      git clone https://github.com/jayrambhia/Install-OpenCV.git
+      cd Install-OpenCV/Ubuntu
+      ./opencv_latest.sh
+      ln /dev/null /dev/raw1394
+      cd /home/vagrant
+      git clone https://github.com/tensorflow/tensorflow.git
+
+
+      #awk '{print $1}' /tmp/result | grep -v .jpg | tr -d , | uniq  | xargs -i mkdir /tmp/image/{}
+      
+      
+    SHELL
+  end
+end
