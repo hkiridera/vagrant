@@ -1,0 +1,57 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Every Vagrant development environment requires a box. You can search for
+  # boxes at https://atlas.hashicorp.com/search.
+  
+  
+  config.vm.define :node1 do |node|
+    node.vm.box = "bento/ubuntu-16.04"
+    node.vm.network "private_network", ip: "192.168.33.15"
+    node.vm.network "public_network", ip: "192.168.12.253"
+    #node.vm.synced_folder "./data", "/vagrant_data"
+    node.vm.synced_folder ".", "/vagrant", disabled: true
+    node.vm.provider "virtualbox" do |vb|
+      vb.gui = false
+      vb.memory = "4096"
+    end
+    
+    node.vm.provision :shell, :path => "./data/script.sh"
+  end
+  
+  config.vm.define :node2 do |node|
+    node.vm.box = "bento/centos-7.2"
+#    node.vm.box = "ubuntu/trusty64"
+    node.vm.network "private_network", ip: "192.168.33.16"
+    node.vm.network "public_network", ip: "192.168.12.252"
+    #node.vm.synced_folder "./data", "/vagrant_data"
+    node.vm.synced_folder ".", "/vagrant", disabled: true
+    node.vm.provider "virtualbox" do |vb|
+      vb.gui = false
+      vb.memory = "4096"
+    end
+    #node.vm.provision :shell, :path => "./data/script.sh"
+  end
+  config.vm.define :node3 do |node|
+    node.vm.box = "bento/ubuntu-16.04"
+#    node.vm.box = "ubuntu/trusty64"
+    node.vm.network "private_network", ip: "192.168.33.17"
+    node.vm.network "public_network", ip: "192.168.12.251"
+    #node.vm.synced_folder "./data", "/vagrant_data"
+    node.vm.synced_folder ".", "/vagrant", disabled: true
+    node.vm.provider "virtualbox" do |vb|
+      vb.gui = true
+      vb.memory = "2048"
+    end
+    #node.vm.provision :shell, :path => "./data/script.sh"
+  end  
+end
