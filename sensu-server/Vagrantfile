@@ -1,0 +1,278 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Every Vagrant development environment requires a box. You can search for
+  # boxes at https://atlas.hashicorp.com/search.
+  config.vm.box = "centos7"
+
+  # Disable automatic box update checking. If you disable this, then
+  # boxes will only be checked for updates when the user runs
+  # `vagrant box outdated`. This is not recommended.
+  # config.vm.box_check_update = false
+
+  # Create a forwarded port mapping which allows access to a specific port
+  # within the machine from a port on the host machine. In the example below,
+  # accessing "localhost:8080" will access port 80 on the guest machine.
+  # config.vm.network "forwarded_port", guest: 80, host: 8080
+
+  # Create a private network, which allows host-only access to the machine
+  # using a specific IP.
+  config.vm.network "private_network", ip: "192.168.33.7"
+
+  # Create a public network, which generally matched to bridged network.
+  # Bridged networks make the machine appear as another physical device on
+  # your network.
+  # config.vm.network "public_network"
+
+  # Share an additional folder to the guest VM. The first argument is
+  # the path on the host to the actual folder. The second argument is
+  # the path on the guest to mount the folder. And the optional third
+  # argument is a set of non-required options.
+  # config.vm.synced_folder "../data", "/vagrant_data"
+
+  # Provider-specific configuration so you can fine-tune various
+  # backing providers for Vagrant. These expose provider-specific options.
+  # Example for VirtualBox:
+  #
+  # config.vm.provider "virtualbox" do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+  #   vb.memory = "1024"
+  # end
+  #
+  # View the documentation for the provider you are using for more
+  # information on available options.
+
+  # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
+  # such as FTP and Heroku are also available. See the documentation at
+  # https://docs.vagrantup.com/v2/push/atlas.html for more information.
+  # config.push.define "atlas" do |push|
+  #   push.app = "YOUR_ATLAS_USERNAME/YOUR_APPLICATION_NAME"
+  # end
+
+  # Enable provisioning with a shell script. Additional provisioners such as
+  # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
+  # documentation for more information about their specific syntax and use.
+  config.vm.provision "shell", inline: <<-SHELL
+    ## create ssl key
+    cd /var/tmp
+    wget http://sensuapp.org/docs/0.16/tools/ssl_certs.tar --no-check-certificate
+    tar xvf ssl_certs.tar
+    cd ssl_certs
+    ./ssl_certs.sh generate
+    
+    ## rabbitmq install
+    cd /var/tmp/
+    sudo rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/i386/epel-release-6-8.noarch.rpm
+    sudo yum install erlang -y
+    sudo rpm --import http://www.rabbitmq.com/rabbitmq-signing-key-public.asc
+    sudo rpm -Uvh http://www.rabbitmq.com/releases/rabbitmq-server/v3.2.1/rabbitmq-server-3.2.1-1.noarch.rpm
+    # sudo update-rc.d rabbitmq-server defaults
+    
+    
+    
+    ## configure ssl
+    sudo mkdir -p /etc/rabbitmq/ssl
+    echo "[
+    {rabbit, [
+    {ssl_listeners, [5671]},
+    {ssl_options, [{cacertfile,\'/etc/rabbitmq/ssl/cacert.pem\'},
+                   {certfile,\'/etc/rabbitmq/ssl/cert.pem\'},
+                   {keyfile,\'/etc/rabbitmq/ssl/key.pem\'},
+                   {verify,verify_peer},
+                   {fail_if_no_peer_cert,true}]}
+  ]}
+ ]." | sudo tee /etc/rabbitmq/rabbitmq.config > /dev/null
+  sudo chkconfig rabbitmq-server on
+  sudo /etc/init.d/rabbitmq-server start
+  
+  ## create credenstials
+  sudo rabbitmqctl add_vhost /sensu
+  sudo rabbitmqctl add_user sensu sensu
+  sudo rabbitmqctl set_permissions -p /sensu sensu ".*" ".*" ".*"
+  sudo rabbitmq-plugins enable rabbitmq_management
+  sudo service rabbitmq-server restart
+  sudo rabbitmqctl add_user admin rabbitmq-admin-password
+  
+  ## inst6all redis
+  sudo yum install redis -y
+  sudo chkconfig redis on
+  sudo service redis start
+  
+  ## install sensu
+  echo "[sensu]
+name=sensu-main
+baseurl=http://repos.sensuapp.org/yum/el/\\$releasever/\\$basearch/
+gpgcheck=0
+enabled=1" | sudo tee /etc/yum.repos.d/sensu.repo  > /dev/null
+  sudo yum install sensu -y
+  sudo mkdir -p /etc/sensu/ssl
+  sudo cp -a client/cert.pem /etc/sensu/ssl/
+  sudo cp -a client/key.pem /etc/sensu/ssl/
+  sudo mkdir -p  /etc/sensu/conf.d/
+  echo "{
+  \\"rabbitmq\\": {
+    \\"ssl\\": {
+      \\"cert_chain_file\': \'/etc/sensu/ssl/cert.pem\\",
+      \\"private_key_file\': \'/etc/sensu/ssl/key.pem\\"
+    },
+    \\"host\\": \\"localhost\\",
+    \\"port\\": 5671,
+    \\"vhost\\": \\"/sensu\\",
+    \\"user\\": \\"sensu\\",
+    \\"password\\": \\"sensu\\"
+  }
+}" | sudo tee /etc/sensu/conf.d/rabbitmq.json > /dev/null
+  
+  echo "{
+  \\"redis\\": {
+    \\"host\\": \\"localhost\\",
+    \\"port\\": 6379
+  }
+}" | sudo tee /etc/sensu/conf.d/redis.json > /dev/null
+  
+  ## setting sensu api
+  echo "{
+  \\"api\\": {
+    \\"host\\": \\"localhost\\",
+    \\"port\\": 4567,
+    \\"user\\": \\"sensu\\",
+    \\"password\\": \\"sensu\\"
+  }
+}" | sudo tee /etc/sensu/conf.d/api.json > /dev/null
+
+  ## setting sensu client
+  echo "{
+  \\"client\\": {
+    \\"name\\": \\"Sensu-Server\\",
+    \\"address\\": \\"127.0.0.1\\",
+    \\"subscriptions\\": [ \\"all\\" ]
+  }
+}" | sudo tee /etc/sensu/conf.d/client.json > /dev/null
+  
+  
+  echo "  \\"handlers\\": {
+    \\"default\\": {
+      \\"type\\": \\"pipe\\",
+      \\"command\\": \\"true\\"
+   },
+   \\"elasticsearch-metrics\\": {
+     \\"type\\": \\"pipe\\",
+     \\"command\\": \\"/etc/sensu/handlers/elasticsearch-metrics.rb\\"
+    }
+  }" | sudo tee /etc/sensu/conf.d/handlers.json > /dev/null
+  cd /etc/sensu/handlers/
+  sudo wget https://raw.githubusercontent.com/inokappa/sensu-handler-metrics-elasticsearch/master/elasticsearch-metrics.rb
+  sudo chmod 755 elasticsearch-metrics.rb
+  cd /etc/sensu/conf.d/
+
+  ## install uchiwa
+  sudo yum install uchiwa -y
+  sudo chown -R sensu:sensu /etc/sensu
+  echo "{
+    \\"sensu\\": [
+        {
+            \\"name\\": \\"Sensu\\",
+            \\"host\\": \\"localhost\\",
+            \\"ssl\\": false,
+            \\"port\\": 4567,
+            \\"user\\": \\"sensu\\",
+            \\"pass\\": \\"sensu\\",
+            \\"path\\": \\"\\",
+            \\"timeout\\": 5000
+        }
+    ],
+    \\"uchiwa\\": {
+        \\"user\\": \\"\\",
+        \\"pass\\": \\"\\",
+        \\"port\\": 3000,
+        \\"stats\\": 10,
+        \\"refresh\\": 10000
+    }
+}" | sudo tee /etc/sensu/uchiwa.json > /dev/null
+
+  echo "{
+  \\"checks\\": {
+    \\"vmstat_metrics\\": {
+      \\"type\\": \\"metric\\",
+      \\"handlers\\": [\\"elasticsearch-metrics\\"],
+      \\"command\\": \\"/usr/local/share/gems/gems/sensu-plugins-openstack-0.0.2/bin/neutron/check_neutron-api.py --auth-url http://192.168.33.5:5000/v2.0 --username admin --password devstack --tenant admin\\",
+      \\"subscribers\\": [
+        \\"default\\",\\"sensu\\"
+      ],
+      \\"interval\\": 60
+    }
+  }
+}" | sudo tee /etc/sensu/conf.d/check_neutron-api.json > /dev/null
+  
+  echo "{
+  \\"elasticsearch-metrics\\": {
+    \\"host\\": \\"127.0.0.1\\",
+    \\"port\\": 9200,
+    \\"index\\": \\"sensu-metrics\\",
+    \\"type\\": \\"metrics\\"
+  }
+}" | sudo tee /etc/sensu/conf.d/elasticsearch-metrics.json > /dev/null
+  sudo service sensu-server restart
+
+
+  sudo chkconfig uchiwa on
+  sudo service uchiwa start
+  
+  sudo chkconfig sensu-server on
+  sudo service sensu-server start
+  sudo chkconfig sensu-api on
+  sudo service sensu-api start
+  sudo chkconfig sensu-client on
+  sudo service sensu-client start
+
+  ## install elasticsearch
+  cd /var/tmp/
+  sudo yum -y install java-1.8.0-openjdk
+  sudo wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.5.1.noarch.rpm
+  sudo rpm -ivh ./elasticsearch-1.5.1.noarch.rpm
+  sudo service elasticsearch start
+  sudo chkconfig elasticsearch on
+  
+  ##install kibana4
+  cd /var/tmp/
+  sudo wget https://download.elastic.co/kibana/kibana/kibana-4.0.1-linux-x64.tar.gz
+  tar xvzf kibana-4.0.1-linux-x64.tar.gz
+  sudo ./kibana-4.0.1-linux-x64/bin/kibana > /tmp/kibana.log &
+
+  ## install gem
+  cd /var/tmp/
+  sudo yum install --enablerepo=epel make gcc zlib-devel openssl-devel readline-devel ncurses-devel gdbm-devel db4-devel libffi-devel tk-devel libyaml-devel
+  sudo yum -y install rubygems
+  
+  sudo gem install sensu-plugins-openstack
+  
+  cd /var/tmp/
+  sudo yum install -y libxml2 libxml2-devel libxslt libxslt-devel python-devel libffi-devel openssl-devel gcc
+  curl -O https://bootstrap.pypa.io/get-pip.py
+  sudo python get-pip.py
+  sudo pip install --upgrade setuptools
+  sudo pip install python-neutronclient
+  sudo pip install python-novaclient
+  sudo pip install python-keystoneclient
+  sudo pip install python-ceilometerclient
+  
+  sudo systemctl stop firewalld
+  
+  
+  #   sudo apt-get update
+  #   sudo apt-get install -y apache2
+  
+  SHELL
+end
