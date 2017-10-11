@@ -1,0 +1,74 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure(2) do |config|
+
+  config.cache.scope = :box
+ 
+  config.vm.define :node1 do |node|
+    node.cache.scope = :box
+    node.vm.box = "ubuntu/trusty64"
+    node.vm.hostname = "node1"
+    #node.vm.network :forwarded_port, guest: 22, host: 2001, id: "ssh"
+    node.vm.network :public_network, ip: "192.168.12.20"
+    node.vm.provider "virtualbox" do |vb|
+     # Customize the amount of memory on the VM:
+     vb.memory = "1024"
+     vb.gui = true
+     vb.cpus = "1"
+    end    
+    node.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y wget curl git unzip wine
+      wget https://github.com/NECROBOTIO/NecroBot/releases/download/v0.7.6/Release.zip
+      unzip Release.zip
+      sudo chown vagrant:vagrant -R Release
+      cd Release
+      chmod +x NecroBot.exe
+      sudo dpkg --add-architecture i386 
+      sudo add-apt-repository -y ppa:wine/wine-builds
+      sudo apt-get update
+      sudo apt-get install -y --install-recommends winehq-devel
+      
+    SHELL
+  end
+  config.vm.define :node2 do |node|
+    node.cache.scope = :box
+    node.vm.box = "ubuntu/trusty64"
+    node.vm.hostname = "node2"
+    #node.vm.network :forwarded_port, guest: 22, host: 2001, id: "ssh"
+    node.vm.network :public_network, ip: "192.168.12.21"
+    node.vm.provider "virtualbox" do |vb|
+     # Customize the amount of memory on the VM:
+     vb.memory = "1024"
+     vb.gui = true
+     vb.cpus = "1"
+    end    
+    node.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y wget curl git unzip
+    SHELL
+  end
+  config.vm.define :node3 do |node|
+    node.cache.scope = :box
+    node.vm.box = "ubuntu/trusty64"
+    node.vm.hostname = "node3"
+    #node.vm.network :forwarded_port, guest: 22, host: 2001, id: "ssh"
+    node.vm.network :public_network, ip: "192.168.12.22"
+    node.vm.provider "virtualbox" do |vb|
+     # Customize the amount of memory on the VM:
+     vb.memory = "1024"
+     vb.gui = true
+     vb.cpus = "1"
+    end    
+    node.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y wget curl git unzip
+    SHELL
+  end
+  
+end
